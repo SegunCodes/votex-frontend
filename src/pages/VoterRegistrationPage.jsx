@@ -1,139 +1,158 @@
-/* eslint-disable no-undef */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { doc, setDoc } from 'firebase/firestore';
+import { registerVoterByAdmin } from '../services/apiService';
 
-const VoterRegistrationPage = ({
-  isWalletConnected,
-  walletAddress,
-  setActiveView,
-  showMessage,
-  db,
-  userId,
-}) => {
-  const [voterName, setVoterName] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
+const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('');
+  const [nationalIdNumber, setNationalIdNumber] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Check if wallet is connected when page loads
-  useEffect(() => {
-    if (!isWalletConnected) {
-      showMessage('Please connect your wallet to register.', 'info');
-    }
-  }, [isWalletConnected, showMessage]);
+  // Ensure only admin can access this page
+  if (!user || user.role !== 'admin') {
+    showMessage('Access denied. Only admins can register voters.', 'error');
+    setActiveView('adminLogin');
+    return null;
+  }
 
-  const handleRegisterVoter = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isWalletConnected) {
-      showMessage('Please connect your MetaMask wallet first.', 'error');
-      return;
-    }
-    if (!voterName.trim()) {
-      showMessage('Please enter your name.', 'error');
-      return;
-    }
-    if (!db || !userId) {
-      showMessage('Firestore not initialized or user not authenticated. Please refresh.', 'error');
-      console.error('Firestore DB or userId is undefined:', { db, userId });
-      return;
-    }
-
-    setIsRegistering(true);
+    setIsLoading(true);
     try {
-      // Store voter bio-data in Firestore (off-chain)
-      // Path: /artifacts/{appId}/users/{userId}/voters
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-      const voterDocRef = doc(db, `artifacts/${appId}/users/${userId}/voters`, walletAddress);
-
-      await setDoc(voterDocRef, {
-        name: voterName,
-        walletAddress: walletAddress,
-        registeredAt: new Date().toISOString(),
-        // NOTE: I will add more bio-data fields as needed
-        // For 'Voting ID', the walletAddress serves as the primary DID
-      }, { merge: true });
-
-      showMessage('Voter registered successfully! Redirecting to dashboard...', 'success');
-      // Note store this on the blockchain via a smart contract call
-      // and then navigate to a dashboard or voting page.
-      setTimeout(() => setActiveView('dashboard'), 2000); // Placeholder for dashboard
+      const voterData = {
+        email,
+        name,
+        age: parseInt(age),
+        gender,
+        nationalIdNumber: nationalIdNumber || null,
+      };
+      const response = await registerVoterByAdmin(voterData);
+      showMessage(response.message, 'success');
+      // Clear form
+      setEmail('');
+      setName('');
+      setAge('');
+      setGender('');
+      setNationalIdNumber('');
     } catch (error) {
-      console.error('Error registering voter:', error);
-      showMessage(`Error registering voter: ${error.message}`, 'error');
+      console.error('Admin voter registration error:', error);
+      showMessage(error.data?.error || error.message || 'Failed to register voter.', 'error');
     } finally {
-      setIsRegistering(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-inter flex flex-col items-center justify-center p-8">
-      <h2 className="text-5xl font-bold mb-6 text-purple-400">Voter Registration</h2>
+      <h2 className="text-5xl font-bold mb-6 text-teal-400">Admin: Register New Voter</h2>
       <p className="text-lg text-gray-300 mb-8 text-center max-w-xl">
-        Connect your MetaMask wallet to establish your decentralized identity and register to vote.
+        Register a new voter profile. They will link their wallet during their first login.
       </p>
 
-      {/* Wallet Connection Status */}
-      {isWalletConnected ? (
-        <div className="bg-gray-800 p-4 rounded-lg shadow-md mb-8 w-full max-w-md text-center">
-          <p className="text-green-400 text-md">
-            Wallet Connected: <span className="font-mono text-sm break-all">{walletAddress}</span>
-          </p>
-          <p className="text-gray-400 text-sm mt-2">This will be your primary Decentralized ID (DID).</p>
+      <form onSubmit={handleSubmit} className="bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md">
+        <div className="mb-4">
+          <label htmlFor="email" className="block text-gray-300 text-sm font-bold mb-2">
+            Voter Email:
+          </label>
+          <input
+            type="email"
+            id="email"
+            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-900 leading-tight focus:outline-none focus:shadow-outline bg-gray-200"
+            placeholder="voter@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={isLoading}
+          />
         </div>
-      ) : (
-        <button
-          onClick={() => showMessage('Please connect your wallet on the landing page first.', 'info')}
-          className="px-6 py-3 bg-gray-600 text-white font-bold rounded-full shadow-lg cursor-not-allowed mb-8"
-          disabled
-        >
-          Connect Wallet (from Landing Page)
-        </button>
-      )}
-
-      {/* Registration Form */}
-      {isWalletConnected && (
-        <form onSubmit={handleRegisterVoter} className="bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md">
-          <div className="mb-6">
-            <label htmlFor="voterName" className="block text-gray-300 text-sm font-bold mb-2">
-              Your Full Name:
-            </label>
-            <input
-              type="text"
-              id="voterName"
-              className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-900 leading-tight focus:outline-none focus:shadow-outline bg-gray-200"
-              placeholder="e.g., John Doe"
-              value={voterName}
-              onChange={(e) => setVoterName(e.target.value)}
-              required
-              disabled={isRegistering}
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold text-lg rounded-full shadow-lg hover:from-purple-700 hover:to-pink-600 transition-all duration-300 transform hover:scale-105"
-            disabled={isRegistering || !isWalletConnected}
+        <div className="mb-4">
+          <label htmlFor="name" className="block text-gray-300 text-sm font-bold mb-2">
+            Full Name:
+          </label>
+          <input
+            type="text"
+            id="name"
+            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-900 leading-tight focus:outline-none focus:shadow-outline bg-gray-200"
+            placeholder="John Doe"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            disabled={isLoading}
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="age" className="block text-gray-300 text-sm font-bold mb-2">
+            Age:
+          </label>
+          <input
+            type="number"
+            id="age"
+            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-900 leading-tight focus:outline-none focus:shadow-outline bg-gray-200"
+            placeholder="e.g., 30"
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            required
+            min="18"
+            disabled={isLoading}
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="gender" className="block text-gray-300 text-sm font-bold mb-2">
+            Gender:
+          </label>
+          <select
+            id="gender"
+            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-900 leading-tight focus:outline-none focus:shadow-outline bg-gray-200"
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            required
+            disabled={isLoading}
           >
-            {isRegistering ? 'Registering...' : 'Register Voter'}
-          </button>
-        </form>
-      )}
+            <option value="">-- Select Gender --</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div className="mb-6">
+          <label htmlFor="nationalId" className="block text-gray-300 text-sm font-bold mb-2">
+            National ID Number (Optional):
+          </label>
+          <input
+            type="text"
+            id="nationalId"
+            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-900 leading-tight focus:outline-none focus:shadow-outline bg-gray-200"
+            placeholder="e.g., NIN123456789"
+            value={nationalIdNumber}
+            onChange={(e) => setNationalIdNumber(e.target.value)}
+            disabled={isLoading}
+          />
+        </div>
+        <button
+          type="submit"
+          className="w-full px-6 py-3 bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-bold text-lg rounded-full shadow-lg hover:from-teal-700 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Registering Voter...' : 'Register Voter'}
+        </button>
+      </form>
 
       <button
-        onClick={() => setActiveView('landing')}
+        onClick={() => setActiveView('adminDashboard')}
         className="mt-8 px-6 py-3 bg-gray-600 text-white font-semibold rounded-full shadow-lg hover:bg-gray-700 transition-colors duration-300"
       >
-        Back to Landing
+        Back to Admin Dashboard
       </button>
     </div>
   );
 };
 
 VoterRegistrationPage.propTypes = {
-  isWalletConnected: PropTypes.bool.isRequired,
-  walletAddress: PropTypes.string.isRequired,
   setActiveView: PropTypes.func.isRequired,
   showMessage: PropTypes.func.isRequired,
-  db: PropTypes.object, // Firebase Firestore instance
-  userId: PropTypes.string, // Firebase Auth user ID
+  user: PropTypes.object,
 };
 
 export default VoterRegistrationPage;

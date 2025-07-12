@@ -1,10 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable no-undef */
-/* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import React, { useState, useEffect, useCallback } from 'react';
 import AppRouter from './router/AppRouter';
 import MessageBox from './components/MessageBox';
 
@@ -14,32 +8,25 @@ const App = () => {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
   const [message, setMessage] = useState({ text: '', type: '' });
-  const [firebaseApp, setFirebaseApp] = useState(null);
-  const [auth, setAuth] = useState(null);
-  const [db, setDb] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false); // To ensure Firestore operations wait for auth
+  const [user, setUser] = useState(null);
 
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-  const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-  const showMessage = (text, type = 'info', duration = 3000) => {
+  // --- Utility Function to Display Messages ---
+  const showMessage = useCallback((text, type = 'info', duration = 3000) => {
     setMessage({ text, type });
     setTimeout(() => setMessage({ text: '', type: '' }), duration);
-  };
+  }, []);
 
-  // Wallet Connection Logic
-  const connectWallet = async () => {
+  // --- Wallet Connection Logic ---
+  const connectWallet = useCallback(async () => {
     if (typeof window.ethereum !== 'undefined') {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         setIsWalletConnected(true);
         setWalletAddress(accounts[0]);
         showMessage('Wallet connected successfully!', 'success');
-        // If wallet connected, automatically go to registration/dashboard
-        if (activeView === 'landing') { // Only navigate if on landing
-            setActiveView('voterRegistration');
+        // If a voter, and wallet is connected, might auto-redirect to voter login/dashboard
+        if (user && user.role === 'voter') {
+          setActiveView('voterDashboard');
         }
       } catch (error) {
         console.error("User denied account access or another error occurred:", error);
@@ -51,62 +38,87 @@ const App = () => {
         window.open('https://metamask.io/download/', '_blank');
       }, 2000);
     }
-  };
+  }, [showMessage, user]);
 
-  //Firebase Initialization and Authentication Effect
+  const disconnectWallet = useCallback(() => {
+    setIsWalletConnected(false);
+    setWalletAddress('');
+    showMessage('Wallet disconnected.', 'info');
+    // Note: MetaMask doesn't have a direct 'disconnect' API for all providers.
+    // This primarily clears oour app's state.
+  }, [showMessage]);
+
+  // --- Initial Load & Auth Check ---
   useEffect(() => {
-    // Initialize Firebase only once
-    if (Object.keys(firebaseConfig).length === 0) {
-      console.warn('Firebase config not provided. Firebase features will be limited.');
-      setIsAuthReady(true); // Still mark as ready if no config
-      return;
+    // Check for existing token in localStorage on app load
+    const token = localStorage.getItem('jwtToken');
+    if (token) {
+      // In a real app, you'd send this token to your backend to verify it
+      // and get the user's details, rather than just decoding it client-side.
+      // For now, a simple client-side decode to get user role/walletAddress
+      try {
+        const decodedUser = JSON.parse(atob(token.split('.')[1])); // Basic decode, not verification
+        setUser(decodedUser);
+        if (decodedUser.role === 'admin') {
+          setActiveView('adminDashboard');
+        } else if (decodedUser.role === 'voter') {
+          setActiveView('voterDashboard');
+        }
+      } catch (e) {
+        console.error('Failed to decode token from localStorage:', e);
+        localStorage.removeItem('jwtToken'); // Clear invalid token
+      }
     }
 
-    if (!firebaseApp) {
-      const app = initializeApp(firebaseConfig);
-      const authInstance = getAuth(app);
-      const dbInstance = getFirestore(app);
-
-      setFirebaseApp(app);
-      setAuth(authInstance);
-      setDb(dbInstance);
-
-      const unsubscribe = onAuthStateChanged(authInstance, (user) => {
-        if (user) {
-          setUserId(user.uid);
-          console.log('Firebase User ID:', user.uid);
-        } else {
-          setUserId(null);
-          console.log('No Firebase user signed in.');
-        }
-        setIsAuthReady(true);
-      });
-
-      const signInFirebase = async () => {
-        try {
-          if (initialAuthToken) {
-            await signInWithCustomToken(authInstance, initialAuthToken);
-            console.log("Firebase signed in with custom token!");
-          } else {
-            await signInAnonymously(authInstance);
-            console.log("Signed in anonymously to Firebase.");
+    // Check for MetaMask connection on load
+    if (typeof window.ethereum !== 'undefined') {
+      window.ethereum.request({ method: 'eth_accounts' })
+        .then(accounts => {
+          if (accounts.length > 0) {
+            setIsWalletConnected(true);
+            setWalletAddress(accounts[0]);
           }
-        } catch (error) {
-          console.error("Firebase authentication error:", error);
-          showMessage(`Firebase auth error: ${error.message}`, 'error');
+        })
+        .catch(error => console.error("Error checking MetaMask accounts:", error));
+
+      // Listen for account changes in MetaMask
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length > 0) {
+          setIsWalletConnected(true);
+          setWalletAddress(accounts[0]);
+          showMessage('MetaMask account changed.', 'info');
+          // If user role is voter, might need to re-authenticate or refresh dashboard
+          if (user && user.role === 'voter') {
+            // Force re-authentication or refresh dashboard based on new wallet
+            // For now, just update state.
+          }
+        } else {
+          disconnectWallet();
+          // If the connected account is removed, log out the user if they were a voter
+          if (user && user.role === 'voter') {
+            setUser(null);
+            localStorage.removeItem('jwtToken');
+            setActiveView('landing');
+            showMessage('MetaMask disconnected. You have been logged out.', 'info');
+          }
         }
-      };
-
-      signInFirebase();
-
-      return () => unsubscribe();
+      });
     }
-  }, [firebaseApp, firebaseConfig, initialAuthToken]); // Only re-run if firebaseApp, config, or token changes
+
+    // Cleanup listener on component unmount
+    return () => {
+      if (typeof window.ethereum !== 'undefined' && window.ethereum.removeListener) {
+        window.ethereum.removeListener('accountsChanged', () => { });
+      }
+    };
+  }, [showMessage, disconnectWallet, user]); // Added user to dependencies
 
   return (
     <div className="relative min-h-screen bg-gray-900 text-white font-inter flex flex-col">
+      {/* Global Message Box */}
       <MessageBox message={message} clearMessage={() => showMessage('', '')} />
 
+      {/* Main Router Component */}
       <AppRouter
         activeView={activeView}
         setActiveView={setActiveView}
@@ -114,9 +126,10 @@ const App = () => {
         walletAddress={walletAddress}
         message={message}
         showMessage={showMessage}
-        db={db}
-        userId={userId}
+        user={user}
+        setUser={setUser}
         connectWallet={connectWallet}
+        disconnectWallet={disconnectWallet}
       />
     </div>
   );

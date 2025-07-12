@@ -1,7 +1,13 @@
+/* eslint-disable no-unused-vars */
+
 import React from 'react';
 import PropTypes from 'prop-types';
 import LandingPage from '../pages/LandingPage';
 import VoterRegistrationPage from '../pages/VoterRegistrationPage';
+import AdminLoginPage from '../pages/AdminLoginPage';
+import VoterDashboardPage from '../pages/VoterDashboardPage';
+import AdminDashboardPage from '../pages/AdminDashboardPage';
+import PublicResultsPage from '../pages/PublicResultsPage';
 
 const AppRouter = ({
   activeView,
@@ -10,9 +16,10 @@ const AppRouter = ({
   walletAddress,
   message,
   showMessage,
-  db, // Pass db and userId to pages that need them
-  userId,
-  connectWallet // Connect wallet function passed down
+  user, // The authenticated user object (admin or voter)
+  setUser, // Function to set user
+  connectWallet,
+  disconnectWallet // New prop
 }) => {
   switch (activeView) {
     case 'landing':
@@ -22,7 +29,6 @@ const AppRouter = ({
           isWalletConnected={isWalletConnected}
           walletAddress={walletAddress}
           setActiveView={setActiveView}
-          message={message}
           showMessage={showMessage}
         />
       );
@@ -33,40 +39,58 @@ const AppRouter = ({
           walletAddress={walletAddress}
           setActiveView={setActiveView}
           showMessage={showMessage}
-          db={db}
-          userId={userId}
+        // Note: Voter registration is now admin-driven, this page will be for the admin,
+        // or for voter to initiate linking their wallet after admin registration.
+        // For now, it's a placeholder for the admin's voter registration form.
+        />
+      );
+    case 'voterLogin': // New route for voters to login via wallet
+      return (
+        <VoterLoginPage
+          isWalletConnected={isWalletConnected}
+          walletAddress={walletAddress}
+          connectWallet={connectWallet}
+          setActiveView={setActiveView}
+          showMessage={showMessage}
+          setUser={setUser}
         />
       );
     case 'adminLogin':
-      // Placeholder for Admin Login Page
       return (
-        <div className="min-h-screen bg-gray-900 text-white font-inter flex flex-col items-center justify-center p-8">
-          <h2 className="text-5xl font-bold mb-6 text-orange-400">Admin Login</h2>
-          <p className="text-lg text-gray-300">Admin authentication goes here.</p>
-          <button
-            onClick={() => setActiveView('landing')}
-            className="mt-8 px-6 py-3 bg-gray-600 text-white font-semibold rounded-full shadow-lg hover:bg-gray-700 transition-colors duration-300"
-          >
-            Back to Landing
-          </button>
-        </div>
+        <AdminLoginPage
+          setActiveView={setActiveView}
+          showMessage={showMessage}
+          setUser={setUser}
+        />
       );
-    case 'dashboard':
-        // Placeholder for Dashboard
-        return (
-            <div className="min-h-screen bg-gray-900 text-white font-inter flex flex-col items-center justify-center p-8">
-                <h2 className="text-5xl font-bold mb-6 text-teal-400">Voter Dashboard</h2>
-                <p className="text-lg text-gray-300">Welcome! Your voter ID is: {walletAddress}</p>
-                <p className="text-md text-gray-400 mt-2">Firebase User ID: {userId}</p>
-                <button
-                    onClick={() => setActiveView('landing')}
-                    className="mt-8 px-6 py-3 bg-gray-600 text-white font-semibold rounded-full shadow-lg hover:bg-gray-700 transition-colors duration-300"
-                >
-                    Back to Landing
-                </button>
-            </div>
-        );
-    // I will add other cases for 'votingPage', 'resultsPage', etc.
+    case 'voterDashboard':
+      return (
+        <VoterDashboardPage
+          user={user}
+          isWalletConnected={isWalletConnected}
+          walletAddress={walletAddress}
+          setActiveView={setActiveView}
+          showMessage={showMessage}
+          disconnectWallet={disconnectWallet}
+        />
+      );
+    case 'adminDashboard':
+      return (
+        <AdminDashboardPage
+          user={user}
+          setActiveView={setActiveView}
+          showMessage={showMessage}
+          disconnectWallet={disconnectWallet}
+        />
+      );
+    case 'publicResults':
+      return (
+        <PublicResultsPage
+          setActiveView={setActiveView}
+          showMessage={showMessage}
+        />
+      );
+    // Add other cases for 'votingPage', 'resultsPage', etc.
     default:
       return (
         <LandingPage
@@ -74,7 +98,6 @@ const AppRouter = ({
           isWalletConnected={isWalletConnected}
           walletAddress={walletAddress}
           setActiveView={setActiveView}
-          message={message}
           showMessage={showMessage}
         />
       );
@@ -91,9 +114,10 @@ AppRouter.propTypes = {
     type: PropTypes.oneOf(['success', 'error', 'info']),
   }).isRequired,
   showMessage: PropTypes.func.isRequired,
-  db: PropTypes.object,
-  userId: PropTypes.string,
+  user: PropTypes.object, // Can be null
+  setUser: PropTypes.func.isRequired,
   connectWallet: PropTypes.func.isRequired,
+  disconnectWallet: PropTypes.func.isRequired,
 };
 
 export default AppRouter;
