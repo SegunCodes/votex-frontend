@@ -1,19 +1,21 @@
-import React, { useState } from 'react';
-import PropTypes from 'prop-types';
-import { registerVoterByAdmin } from '../services/apiService';
+import React, {  useState } from "react";
+import PropTypes from "prop-types";
+import { registerVoterByAdmin } from "../services/apiService";
 
 const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState('');
-  const [nationalIdNumber, setNationalIdNumber] = useState('');
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState("");
+  const [nationalIdNumber, setNationalIdNumber] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // useEffect(() => console.log("Active"), []);
+
   // Ensure only admin can access this page
-  if (!user || user.role !== 'admin') {
-    showMessage('Access denied. Only admins can register voters.', 'error');
-    setActiveView('adminLogin');
+  if (!user || user.role !== "admin") {
+    showMessage("Access denied. Only admins can register voters.", "error");
+    setActiveView("adminLogin");
     return null;
   }
 
@@ -29,16 +31,19 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
         nationalIdNumber: nationalIdNumber || null,
       };
       const response = await registerVoterByAdmin(voterData);
-      showMessage(response.message, 'success');
+      showMessage(response.message, "success");
       // Clear form
-      setEmail('');
-      setName('');
-      setAge('');
-      setGender('');
-      setNationalIdNumber('');
+      setEmail("");
+      setName("");
+      setAge("");
+      setGender("");
+      setNationalIdNumber("");
     } catch (error) {
-      console.error('Admin voter registration error:', error);
-      showMessage(error.data?.error || error.message || 'Failed to register voter.', 'error');
+      console.error("Admin voter registration error:", error);
+      showMessage(
+        error.data?.error || error.message || "Failed to register voter.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -46,14 +51,23 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-inter flex flex-col items-center justify-center p-8">
-      <h2 className="text-5xl font-bold mb-6 text-teal-400">Admin: Register New Voter</h2>
+      <h2 className="text-5xl font-bold mb-6 text-teal-400">
+        Admin: Register New Voter
+      </h2>
       <p className="text-lg text-gray-300 mb-8 text-center max-w-xl">
-        Register a new voter profile. They will link their wallet during their first login.
+        Register a new voter profile. They will link their wallet during their
+        first login.
       </p>
 
-      <form onSubmit={handleSubmit} className="bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md"
+      >
         <div className="mb-4">
-          <label htmlFor="email" className="block text-gray-300 text-sm font-bold mb-2">
+          <label
+            htmlFor="email"
+            className="block text-gray-300 text-sm font-bold mb-2"
+          >
             Voter Email:
           </label>
           <input
@@ -68,7 +82,10 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="name" className="block text-gray-300 text-sm font-bold mb-2">
+          <label
+            htmlFor="name"
+            className="block text-gray-300 text-sm font-bold mb-2"
+          >
             Full Name:
           </label>
           <input
@@ -83,7 +100,10 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="age" className="block text-gray-300 text-sm font-bold mb-2">
+          <label
+            htmlFor="age"
+            className="block text-gray-300 text-sm font-bold mb-2"
+          >
             Age:
           </label>
           <input
@@ -99,7 +119,10 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="gender" className="block text-gray-300 text-sm font-bold mb-2">
+          <label
+            htmlFor="gender"
+            className="block text-gray-300 text-sm font-bold mb-2"
+          >
             Gender:
           </label>
           <select
@@ -117,7 +140,10 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
           </select>
         </div>
         <div className="mb-6">
-          <label htmlFor="nationalId" className="block text-gray-300 text-sm font-bold mb-2">
+          <label
+            htmlFor="nationalId"
+            className="block text-gray-300 text-sm font-bold mb-2"
+          >
             National ID Number (Optional):
           </label>
           <input
@@ -135,12 +161,12 @@ const VoterRegistrationPage = ({ setActiveView, showMessage, user }) => {
           className="w-full px-6 py-3 bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-bold text-lg rounded-full shadow-lg hover:from-teal-700 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105"
           disabled={isLoading}
         >
-          {isLoading ? 'Registering Voter...' : 'Register Voter'}
+          {isLoading ? "Registering Voter..." : "Register Voter"}
         </button>
       </form>
 
       <button
-        onClick={() => setActiveView('adminDashboard')}
+        onClick={() => setActiveView("adminDashboard")}
         className="mt-8 px-6 py-3 bg-gray-600 text-white font-semibold rounded-full shadow-lg hover:bg-gray-700 transition-colors duration-300"
       >
         Back to Admin Dashboard

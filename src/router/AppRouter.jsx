@@ -1,13 +1,22 @@
-/* eslint-disable no-unused-vars */
-
 import React from 'react';
 import PropTypes from 'prop-types';
 import LandingPage from '../pages/LandingPage';
-import VoterRegistrationPage from '../pages/VoterRegistrationPage';
+import VoterLoginPage from '../pages/VoterLoginPage';
 import AdminLoginPage from '../pages/AdminLoginPage';
 import VoterDashboardPage from '../pages/VoterDashboardPage';
 import AdminDashboardPage from '../pages/AdminDashboardPage';
 import PublicResultsPage from '../pages/PublicResultsPage';
+
+// Admin Pages
+import ManageElectionsPage from '../pages/admin/ManageElectionsPage';
+import CreateElectionPage from '../pages/admin/CreateElectionPage';
+import ElectionDetailsPage from '../pages/admin/ElectionDetailsPage';
+import VoterRegistrationPage from '../pages/VoterRegistrationPage';
+import ManagePartyMembersPage from '../pages/admin/ManagePartyMembersPage'; // NEW
+
+// Voter Pages
+import VotingPage from '../pages/voter/VotingPage';
+import VoteReceiptsPage from '../pages/voter/VoteReceiptsPage';
 
 const AppRouter = ({
   activeView,
@@ -16,96 +25,70 @@ const AppRouter = ({
   walletAddress,
   message,
   showMessage,
-  user, // The authenticated user object (admin or voter)
-  setUser, // Function to set user
+  user,
+  setUser,
   connectWallet,
-  disconnectWallet // New prop
+  disconnectWallet
 }) => {
-  switch (activeView) {
+  const commonProps = { setActiveView, showMessage, user, setUser, disconnectWallet };
+  const voterAuthProps = { isWalletConnected, walletAddress, connectWallet, ...commonProps };
+
+  const getRouteParams = () => {
+    if (typeof activeView === 'object' && activeView !== null && 'id' in activeView && 'view' in activeView) {
+      return { view: activeView.view, id: activeView.id, postId: activeView.postId };
+    }
+    return { view: activeView };
+  };
+
+  const { view, id, postId } = getRouteParams();
+
+
+  switch (view) {
     case 'landing':
-      return (
-        <LandingPage
-          onConnectWallet={connectWallet}
-          isWalletConnected={isWalletConnected}
-          walletAddress={walletAddress}
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-        />
-      );
-    case 'voterRegistration':
-      return (
-        <VoterRegistrationPage
-          isWalletConnected={isWalletConnected}
-          walletAddress={walletAddress}
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-        // Note: Voter registration is now admin-driven, this page will be for the admin,
-        // or for voter to initiate linking their wallet after admin registration.
-        // For now, it's a placeholder for the admin's voter registration form.
-        />
-      );
-    case 'voterLogin': // New route for voters to login via wallet
-      return (
-        <VoterLoginPage
-          isWalletConnected={isWalletConnected}
-          walletAddress={walletAddress}
-          connectWallet={connectWallet}
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-          setUser={setUser}
-        />
-      );
+      return <LandingPage {...voterAuthProps} message={message} />;
+    case 'voterLogin':
+      return <VoterLoginPage {...voterAuthProps} />;
     case 'adminLogin':
-      return (
-        <AdminLoginPage
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-          setUser={setUser}
-        />
-      );
+      return <AdminLoginPage {...commonProps} />;
     case 'voterDashboard':
-      return (
-        <VoterDashboardPage
-          user={user}
-          isWalletConnected={isWalletConnected}
-          walletAddress={walletAddress}
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-          disconnectWallet={disconnectWallet}
-        />
-      );
+      return <VoterDashboardPage {...voterAuthProps} />;
     case 'adminDashboard':
-      return (
-        <AdminDashboardPage
-          user={user}
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-          disconnectWallet={disconnectWallet}
-        />
-      );
+      return <AdminDashboardPage {...commonProps} />;
     case 'publicResults':
-      return (
-        <PublicResultsPage
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-        />
-      );
-    // Add other cases for 'votingPage', 'resultsPage', etc.
+      return <PublicResultsPage {...commonProps} />;
+
+    // --- Admin Specific Routes ---
+    case 'manageElections':
+      return <ManageElectionsPage {...commonProps} />;
+    case 'createElection':
+      return <CreateElectionPage {...commonProps} />;
+    case 'electionDetails':
+      return <ElectionDetailsPage {...commonProps} electionId={id} />;
+    case 'adminRegisterVoter':
+      return <VoterRegistrationPage {...commonProps} />;
+    case 'managePartyMembers':
+      return <ManagePartyMembersPage {...commonProps} />;
+
+    // --- Voter Specific Routes ---
+    case 'votingPage':
+      return <VotingPage {...voterAuthProps} electionId={id} postId={postId} />;
+    case 'voteReceipts':
+      return <VoteReceiptsPage {...voterAuthProps} />;
+
     default:
-      return (
-        <LandingPage
-          onConnectWallet={connectWallet}
-          isWalletConnected={isWalletConnected}
-          walletAddress={walletAddress}
-          setActiveView={setActiveView}
-          showMessage={showMessage}
-        />
-      );
+      return <LandingPage {...voterAuthProps} message={message} />;
   }
 };
 
 AppRouter.propTypes = {
-  activeView: PropTypes.string.isRequired,
+  activeView: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.shape({
+      view: PropTypes.string.isRequired,
+      id: PropTypes.number,
+      postId: PropTypes.number,
+    })
+  ]).isRequired,
   setActiveView: PropTypes.func.isRequired,
   isWalletConnected: PropTypes.bool.isRequired,
   walletAddress: PropTypes.string.isRequired,
@@ -114,7 +97,7 @@ AppRouter.propTypes = {
     type: PropTypes.oneOf(['success', 'error', 'info']),
   }).isRequired,
   showMessage: PropTypes.func.isRequired,
-  user: PropTypes.object, // Can be null
+  user: PropTypes.object,
   setUser: PropTypes.func.isRequired,
   connectWallet: PropTypes.func.isRequired,
   disconnectWallet: PropTypes.func.isRequired,

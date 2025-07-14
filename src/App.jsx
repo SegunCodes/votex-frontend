@@ -8,7 +8,8 @@ const App = () => {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
   const [message, setMessage] = useState({ text: '', type: '' });
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null); // Stores authenticated user info (admin or voter)
+  const [isAppInitialized, setIsAppInitialized] = useState(false); // NEW: Flag to control initial auth check
 
   // --- Utility Function to Display Messages ---
   const showMessage = useCallback((text, type = 'info', duration = 3000) => {
@@ -24,9 +25,10 @@ const App = () => {
         setIsWalletConnected(true);
         setWalletAddress(accounts[0]);
         showMessage('Wallet connected successfully!', 'success');
-        // If a voter, and wallet is connected, might auto-redirect to voter login/dashboard
-        if (user && user.role === 'voter') {
-          setActiveView('voterDashboard');
+        
+        // After wallet connect, if on landing, navigate to voter login
+        if (activeView === 'landing') {
+          setActiveView('voterLogin');
         }
       } catch (error) {
         console.error("User denied account access or another error occurred:", error);
@@ -38,80 +40,123 @@ const App = () => {
         window.open('https://metamask.io/download/', '_blank');
       }, 2000);
     }
-  }, [showMessage, user]);
+  }, [showMessage, activeView]); // Removed 'user' from dependencies here
 
   const disconnectWallet = useCallback(() => {
     setIsWalletConnected(false);
     setWalletAddress('');
     showMessage('Wallet disconnected.', 'info');
-    // Note: MetaMask doesn't have a direct 'disconnect' API for all providers.
-    // This primarily clears oour app's state.
   }, [showMessage]);
 
-  // --- Initial Load & Auth Check ---
+  // --- Initial Load & Auth Check (Runs once on mount) ---
   useEffect(() => {
-    // Check for existing token in localStorage on app load
-    const token = localStorage.getItem('jwtToken');
-    if (token) {
-      // In a real app, you'd send this token to your backend to verify it
-      // and get the user's details, rather than just decoding it client-side.
-      // For now, a simple client-side decode to get user role/walletAddress
-      try {
-        const decodedUser = JSON.parse(atob(token.split('.')[1])); // Basic decode, not verification
-        setUser(decodedUser);
-        if (decodedUser.role === 'admin') {
-          setActiveView('adminDashboard');
-        } else if (decodedUser.role === 'voter') {
-          setActiveView('voterDashboard');
+    const checkInitialAuthAndWallet = async () => {
+      const token = localStorage.getItem('jwtToken');
+      if (token) {
+        try {
+          const decodedUser = JSON.parse(atob(token.split('.')[1]));
+          setUser(decodedUser); // Set user state
+          
+          // Navigate to appropriate dashboard immediately on initial load if token exists
+          if (decodedUser.role === 'admin') {
+            setActiveView('adminDashboard');
+          } else if (decodedUser.role === 'voter') {
+            setActiveView('voterDashboard');
+          }
+        } catch (e) {
+          console.error('Failed to decode token from localStorage:', e);
+          localStorage.removeItem('jwtToken');
+          setUser(null);
+          setActiveView('landing'); // Fallback to landing if token invalid
         }
-      } catch (e) {
-        console.error('Failed to decode token from localStorage:', e);
-        localStorage.removeItem('jwtToken'); // Clear invalid token
+      } else {
+        setUser(null); // Ensure user is null if no token
+        setActiveView('landing'); // Default to landing if no token
       }
-    }
 
-    // Check for MetaMask connection on load
-    if (typeof window.ethereum !== 'undefined') {
-      window.ethereum.request({ method: 'eth_accounts' })
-        .then(accounts => {
+      // Check for MetaMask connection on initial load
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
           if (accounts.length > 0) {
             setIsWalletConnected(true);
             setWalletAddress(accounts[0]);
           }
-        })
-        .catch(error => console.error("Error checking MetaMask accounts:", error));
+        } catch (error) {
+          console.error("Error checking MetaMask accounts on load:", error);
+        }
+      }
+      setIsAppInitialized(true); // Mark app as initialized after initial checks
+    };
 
-      // Listen for account changes in MetaMask
-      window.ethereum.on('accountsChanged', (accounts) => {
-        if (accounts.length > 0) {
+    checkInitialAuthAndWallet();
+
+    // MetaMask accountsChanged listener (separate from initial check)
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length > 0) {
+        if (accounts[0].toLowerCase() !== walletAddress.toLowerCase()) { // Check if address actually changed
           setIsWalletConnected(true);
           setWalletAddress(accounts[0]);
           showMessage('MetaMask account changed.', 'info');
-          // If user role is voter, might need to re-authenticate or refresh dashboard
-          if (user && user.role === 'voter') {
-            // Force re-authentication or refresh dashboard based on new wallet
-            // For now, just update state.
-          }
-        } else {
-          disconnectWallet();
-          // If the connected account is removed, log out the user if they were a voter
-          if (user && user.role === 'voter') {
+          
+          // If a voter's account changes, force re-authentication
+          if (user && user.role === 'voter' && user.walletAddress.toLowerCase() !== accounts[0].toLowerCase()) {
             setUser(null);
             localStorage.removeItem('jwtToken');
-            setActiveView('landing');
-            showMessage('MetaMask disconnected. You have been logged out.', 'info');
+            setActiveView('voterLogin');
+            showMessage('MetaMask account changed. Please re-login with the new account.', 'info');
           }
         }
-      });
-    }
-
-    // Cleanup listener on component unmount
-    return () => {
-      if (typeof window.ethereum !== 'undefined' && window.ethereum.removeListener) {
-        window.ethereum.removeListener('accountsChanged', () => { });
+      } else {
+        disconnectWallet();
+        if (user && user.role === 'voter') { // Only log out if the current user was a voter
+          setUser(null);
+          localStorage.removeItem('jwtToken');
+          setActiveView('landing');
+          showMessage('MetaMask disconnected. You have been logged out.', 'info');
+        }
       }
     };
-  }, [showMessage, disconnectWallet, user]); // Added user to dependencies
+
+    if (typeof window.ethereum !== 'undefined') {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+    }
+
+    return () => {
+      if (typeof window.ethereum !== 'undefined' && window.ethereum.removeListener) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      }
+    };
+  }, []);
+
+  // This useEffect handles navigation AFTER user state changes from login/logout
+  useEffect(() => {
+    const allowedViewsByRole = {
+      admin: ['adminDashboard', 'adminLogin', 'adminRegisterVoter', 'manageElections', 'electionDetails', 'createElection', 'managePartyMembers'],
+      voter: ['voterDashboard', 'voterLogin', 'votingPage', 'voteReceipts', 'publicResults'],
+      guest: ['landing', 'adminLogin', 'voterLogin', 'publicResults'],
+    };
+  
+    const role = user?.role || 'guest';
+    const allowedViews = allowedViewsByRole[role];
+  
+    const currentView = typeof activeView === 'string' ? activeView : activeView.view;
+  
+    if (!allowedViews.includes(currentView)) {
+      if (role === 'admin') setActiveView({ view: 'adminDashboard' });
+      else if (role === 'voter') setActiveView({ view: 'voterDashboard' });
+      else setActiveView({ view: 'landing' });
+    }
+  }, [user, activeView]);  
+
+  // Render AppRouter only after initial authentication check is complete
+  if (!isAppInitialized) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white font-inter flex items-center justify-center">
+        <p className="text-xl text-gray-400">Loading application...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-gray-900 text-white font-inter flex flex-col">
